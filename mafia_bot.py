@@ -221,9 +221,10 @@ class MafiaGame:
         return [p for p in self.get_alive_players().values() if p.team == team]
 
     def assign_roles(self, role_list: List[Role]):
-        alive = list(self.get_alive_players().keys())
-        random.shuffle(alive)
-        for i, user_id in enumerate(alive):
+        # Назначаем роли только игрокам (не ведущему)
+        players_only = [uid for uid in self.get_alive_players().keys() if uid != self.host_id]
+        random.shuffle(players_only)
+        for i, user_id in enumerate(players_only):
             if i < len(role_list):
                 role = role_list[i]
                 self.players[user_id].role = role
@@ -289,10 +290,13 @@ def get_player_game(user_id: int) -> Optional[MafiaGame]:
         return games.get(chat_id)
     return None
 
-def format_players_list(game: MafiaGame, show_roles: bool = False) -> str:
+def format_players_list(game: MafiaGame, show_roles: bool = False, include_host: bool = True) -> str:
     lines = []
     for uid in game.player_order:
         p = game.players[uid]
+        # Ведущий не отображается в списке игроков (только в своей вкладке)
+        if uid == game.host_id and not include_host:
+            continue
         status = "🟢" if p.is_alive else "💀"
         if show_roles and p.role:
             lines.append(f"{status} {p.display_name} — {p.role.value}")
@@ -314,11 +318,11 @@ def get_role_description(role: Role) -> str:
         Role.CUPID: "Выбирает 2 влюблённых. Если один умирает — умирает и второй.",
         Role.JUDGE: "Решает судьбу приговорённого — казнить или помиловать.",
         Role.VETERAN: "Может встать на защиту 3 раза за игру. Убивает ночных посетителей.",
-        Role.MANIAC: "Убивает одного игрока ночью. Побеждает в одиночку.",
+        Role.MANIAC: "Убивает одного игрока ночью. Побеждает в одиночку. Видится мирным для Шерифа.",
         Role.HARLOT: "Заражает чумой. Побеждает, когда все заражены. Доктор лечит чуму.",
         Role.WITCH: "Контролирует действия других. Имеет магический барьер.",
         Role.MAFIA: "Член мафии. Убивает ночью вместе с командой.",
-        Role.MAFIA_BOSS: "Босс мафии. +1 голос при ничьей. Видится мирным для Шерифа.",
+        Role.MAFIA_BOSS: "Босс мафии. Руководит командой.",
         Role.MAFIA_HENCHMAN: "Подручный мафии.",
         Role.YAKUZA: "Член якудза. Убивает ночью вместе с командой.",
         Role.YAKUZA_BOSS: "Босс якудза. +1 голос при ничьей. Ниндзя для Шерифа.",
@@ -367,10 +371,11 @@ async def newgame_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("▶️ Начать игру", callback_data="start_game")],
         [InlineKeyboardButton("❌ Отменить", callback_data="cancel_game")]
     ]
+    host_name = game.players[user.id].display_name
     await update.message.reply_text(
         f"🎭 *Новая игра Мафия создана!*\n\n"
-        f"👤 *Ведущий:* {game.players[user.id].display_name}\n"
-        f"👥 *Игроки (1):*\n{format_players_list(game)}\n\n"
+        f"👤 *Ведущий:* {host_name}\n"
+        f"👥 *Игроки (0):*\n_пока никто не присоединился_\n\n"
         f"Нажмите «Присоединиться» чтобы войти в игру!",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=InlineKeyboardMarkup(keyboard)
@@ -394,9 +399,18 @@ async def join_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     game.add_player(user.id, user.username, user.first_name)
     user_game[user.id] = chat.id
+
+    # Уведомление о присоединении
+    host = game.players.get(game.host_id)
+    host_name = host.display_name if host else "Ведущий"
+    player_count = len([p for p in game.players.values() if p.user_id != game.host_id])
+
     await update.message.reply_text(
-        f"✅ {game.players[user.id].display_name} присоединился!\n"
-        f"👥 Всего игроков: {len(game.players)}"
+        f"✅ *{game.players[user.id].display_name}* присоединился к игре!\n"
+        f"👥 Всего игроков: {player_count}\n"
+        f"👤 Ведущий: {host_name}\n\n"
+        f"📋 *Текущие игроки:*\n{format_players_list(game, include_host=False)}",
+        parse_mode=ParseMode.MARKDOWN
     )
 
 async def leave_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -408,9 +422,10 @@ async def leave_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     game.remove_player(user.id)
     if game.phase == GamePhase.WAITING:
+        remaining = len([p for p in game.players.values() if p.is_active and p.user_id != game.host_id])
         await update.message.reply_text(
             f"👋 {user.first_name} покинул игру.\n"
-            f"👥 Осталось: {len([p for p in game.players.values() if p.is_active])}"
+            f"👥 Осталось игроков: {remaining}"
         )
     else:
         await update.message.reply_text(f"💀 {user.first_name} вышел из игры и считается мёртвым.")
@@ -422,10 +437,14 @@ async def players_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Нет активной игры!")
         return
     show_roles = game.phase == GamePhase.FINISHED
-    await update.message.reply_text(
-        f"👥 *Игроки ({len(game.players)}):*\n{format_players_list(game, show_roles)}",
-        parse_mode=ParseMode.MARKDOWN
-    )
+    host = game.players.get(game.host_id)
+    host_name = host.display_name if host else "?"
+    player_count = len([p for p in game.players.values() if p.user_id != game.host_id])
+
+    text = f"👤 *Ведущий:* {host_name}\n\n"
+    text += f"👥 *Игроки ({player_count}):*\n{format_players_list(game, show_roles, include_host=False)}"
+
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
 async def roles_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "🎭 *Доступные роли:*\n\n"
@@ -512,8 +531,9 @@ async def setroles_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_text(f"❌ Неизвестная роль: `{arg}`", parse_mode=ParseMode.MARKDOWN)
             return
-    if len(roles) != len(game.players):
-        await update.message.reply_text(f"❌ Ролей ({len(roles)}) != игроков ({len(game.players)})!")
+    player_count = len([p for p in game.players.values() if p.user_id != game.host_id])
+    if len(roles) != player_count:
+        await update.message.reply_text(f"❌ Ролей ({len(roles)}) != игроков ({player_count})! Ведущий не получает роль.")
         return
     game.assign_roles(roles)
     for uid, player in game.players.items():
@@ -875,8 +895,7 @@ async def process_night(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame) -> 
     for uid, p in alive.items():
         if p.role in [Role.MAFIA, Role.MAFIA_BOSS, Role.MAFIA_HENCHMAN] and p.mafia_target:
             mafia_votes[p.mafia_target] = mafia_votes.get(p.mafia_target, 0) + 1
-            if p.role == Role.MAFIA_BOSS:
-                mafia_votes[p.mafia_target] += 1
+            # Босс мафии не имеет +1 голоса
     if mafia_votes:
         mafia_target = max(mafia_votes, key=mafia_votes.get)
         alive_mafia = [u for u, p in alive.items() if p.team == Team.MAFIA]
@@ -905,8 +924,7 @@ async def process_night(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame) -> 
     for uid, p in alive.items():
         if p.role in [Role.YAKUZA, Role.YAKUZA_BOSS, Role.YAKUZA_HENCHMAN] and p.yakuza_target:
             yakuza_votes[p.yakuza_target] = yakuza_votes.get(p.yakuza_target, 0) + 1
-            if p.role == Role.YAKUZA_BOSS:
-                yakuza_votes[p.yakuza_target] += 1
+            # Босс якудза не имеет +1 голоса
     if yakuza_votes:
         yakuza_target = max(yakuza_votes, key=yakuza_votes.get)
         alive_yakuza = [u for u, p in alive.items() if p.team == Team.YAKUZA]
@@ -970,8 +988,6 @@ async def process_night(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame) -> 
         target = alive.get(sheriff.sheriff_check_target)
         if target:
             if target.role == Role.MANIAC:
-                result = "🟢 Мирный житель"
-            elif target.role == Role.MAFIA_BOSS:
                 result = "🟢 Мирный житель"
             elif target.role == Role.YAKUZA_BOSS:
                 result = "🟢 Мирный житель"
@@ -1425,10 +1441,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("▶️ Начать игру", callback_data="start_game")],
             [InlineKeyboardButton("❌ Отменить", callback_data="cancel_game")]
         ]
+        host = game.players.get(game.host_id)
+        host_name = host.display_name if host else "?"
+        player_count = len([p for p in game.players.values() if p.user_id != game.host_id])
         await query.edit_message_text(
             f"🎭 *Игра Мафия*\n\n"
-            f"👤 *Ведущий:* {game.players[game.host_id].display_name if game.host_id else '?'}\n"
-            f"👥 *Игроки ({len(game.players)}):*\n{format_players_list(game)}\n\n"
+            f"👤 *Ведущий:* {host_name}\n"
+            f"👥 *Игроки ({player_count}):*\n"
+            f"{format_players_list(game, include_host=False)}\n\n"
             f"Нажмите «Присоединиться» чтобы войти!",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=InlineKeyboardMarkup(keyboard)
@@ -1446,9 +1466,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not any(p.role for p in game.players.values()):
             await query.answer("❌ Сначала назначьте роли /setroles!")
             return
+        player_count = len([p for p in game.players.values() if p.user_id != game.host_id])
         await query.edit_message_text(
             f"🎭 *Игра начинается!*\n\n"
-            f"👥 *Игроки ({len(game.players)}):*\n{format_players_list(game)}\n\n"
+            f"👥 *Игроки ({player_count}):*\n"
+            f"{format_players_list(game, include_host=False)}\n\n"
             f"Ведущий, используйте `/startnight` для начала первой ночи!",
             parse_mode=ParseMode.MARKDOWN
         )
