@@ -1,14 +1,1 @@
-# Создадим requirements.txt
-requirements = '''python-telegram-bot==20.7
-'''
-
-with open('/mnt/agents/output/requirements.txt', 'w', encoding='utf-8') as f:
-    f.write(requirements)
-
-# Проверим финальные файлы
-import os
-files = os.listdir('/mnt/agents/output/')
-print("📁 Созданные файлы:")
-for f in sorted(files):
-    size = os.path.getsize(f'/mnt/agents/output/{f}')
-    print(f"  • {f} — {size:,} байт")
+python-telegram-bot==20.7
