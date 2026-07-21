@@ -303,6 +303,13 @@ def format_players_list(game: MafiaGame, show_roles: bool = False, include_host:
         else:
             lines.append(f"{status} {p.display_name}")
     return "\n".join(lines) if lines else "Нет игроков"
+def escape_markdown(text: str) -> str:
+    """Экранирует спецсимволы Markdown V1"""
+    chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    for char in chars:
+        text = text.replace(char, f"\\{char}")
+    return text
+
 
 def get_role_description(role: Role) -> str:
     descriptions = {
@@ -373,11 +380,10 @@ async def newgame_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     host_name = game.players[user.id].display_name
     await update.message.reply_text(
-        f"🎭 *Новая игра Мафия создана!*\n\n"
-        f"👤 *Ведущий:* {host_name}\n"
-        f"👥 *Игроки (0):*\n_пока никто не присоединился_\n\n"
+        f"🎭 Новая игра Мафия создана!\n\n"
+        f"👤 Ведущий: {host_name}\n"
+        f"👥 Игроки (0):\nпока никто не присоединился\n\n"
         f"Нажмите «Присоединиться» чтобы войти в игру!",
-        parse_mode=ParseMode.MARKDOWN,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -1421,71 +1427,160 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     user_id = query.from_user.id
 
+    # Логирование для отладки
+    logger.info(f"Callback: data={data}, user_id={user_id}, chat_id={query.message.chat_id if query.message else 'None'}")
+
     if data == "join_game":
+        # Проверяем, что сообщение существует
+        if not query.message:
+            await query.answer("❌ Ошибка: сообщение не найдено", show_alert=True)
+            return
+
         chat_id = query.message.chat_id
+        logger.info(f"JOIN: chat_id={chat_id}, user_id={user_id}, data={data}")
+
         game = get_game(chat_id)
         if not game:
-            await query.edit_message_text("❌ Игра не найдена!")
+            logger.warning(f"JOIN: игра не найдена для chat_id={chat_id}")
+            await query.answer("❌ Игра не найдена! Возможно, она была отменена.", show_alert=True)
             return
+
         if game.phase != GamePhase.WAITING:
-            await query.answer("❌ Игра уже началась!")
+            logger.info(f"JOIN: игра не в режиме ожидания, phase={game.phase}")
+            await query.answer("❌ Игра уже началась!", show_alert=True)
             return
+
         if user_id in game.players:
-            await query.answer("❌ Вы уже в игре!")
+            logger.info(f"JOIN: пользователь {user_id} уже в игре")
+            await query.answer("❌ Вы уже в игре!", show_alert=True)
             return
+
+        # Добавляем игрока
         user = query.from_user
-        game.add_player(user_id, user.username, user.first_name)
+        success = game.add_player(user_id, user.username, user.first_name)
+        if not success:
+            await query.answer("❌ Не удалось добавить вас в игру.", show_alert=True)
+            return
+
         user_game[user_id] = chat_id
+        logger.info(f"JOIN: игрок {user_id} ({user.username}) добавлен в игру {chat_id}")
+
+        # Подтверждение игроку
+        await query.answer("✅ Вы присоединились к игре!", show_alert=False)
+
+        # Уведомление в групповой чат
+        host = game.players.get(game.host_id)
+        host_name = host.display_name if host else "Ведущий"
+        player_count = len([p for p in game.players.values() if p.user_id != game.host_id])
+        new_player_name = game.players[user_id].display_name
+
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"✅ {new_player_name} присоединился к игре!\n"
+                     f"👥 Всего игроков: {player_count}\n"
+                     f"👤 Ведущий: {host_name}"
+            )
+            logger.info(f"JOIN: уведомление отправлено в чат {chat_id}")
+        except Exception as e:
+            logger.error(f"JOIN: не удалось отправить уведомление в чат: {e}")
+
+        # Обновляем сообщение с кнопками
         keyboard = [
             [InlineKeyboardButton("🎮 Присоединиться", callback_data="join_game")],
             [InlineKeyboardButton("▶️ Начать игру", callback_data="start_game")],
             [InlineKeyboardButton("❌ Отменить", callback_data="cancel_game")]
         ]
-        host = game.players.get(game.host_id)
-        host_name = host.display_name if host else "?"
-        player_count = len([p for p in game.players.values() if p.user_id != game.host_id])
-        await query.edit_message_text(
+
+        players_text = format_players_list(game, include_host=False)
+        new_text = (
             f"🎭 *Игра Мафия*\n\n"
             f"👤 *Ведущий:* {host_name}\n"
             f"👥 *Игроки ({player_count}):*\n"
-            f"{format_players_list(game, include_host=False)}\n\n"
-            f"Нажмите «Присоединиться» чтобы войти!",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            f"{players_text}\n\n"
+            f"Нажмите «Присоединиться» чтобы войти!"
         )
+
+        # Пытаемся отредактировать сообщение
+        edit_success = False
+        try:
+            # Убираем parse_mode чтобы избежать ошибок markdown
+            await query.edit_message_text(
+                text=new_text,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            edit_success = True
+            logger.info(f"JOIN: сообщение отредактировано успешно")
+            return
+        except Exception as e:
+            logger.warning(f"JOIN: не удалось отредактировать сообщение: {e}")
+
+        # Если редактирование не удалось — отправляем новое
+        if not edit_success:
+            try:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=new_text,
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                logger.info(f"JOIN: новое сообщение отправлено")
+            except Exception as e2:
+                logger.error(f"JOIN: не удалось отправить новое сообщение: {e2}")
+
+        return
 
     elif data == "start_game":
         chat_id = query.message.chat_id
         game = get_game(chat_id)
         if not game:
-            await query.edit_message_text("❌ Игра не найдена!")
+            try:
+                await query.edit_message_text("❌ Игра не найдена!")
+            except:
+                await query.answer("❌ Игра не найдена!", show_alert=True)
             return
         if user_id != game.host_id:
-            await query.answer("❌ Только Ведущий может начать!")
+            await query.answer("❌ Только Ведущий может начать!", show_alert=True)
             return
         if not any(p.role for p in game.players.values()):
-            await query.answer("❌ Сначала назначьте роли /setroles!")
+            await query.answer("❌ Сначала назначьте роли /setroles!", show_alert=True)
             return
         player_count = len([p for p in game.players.values() if p.user_id != game.host_id])
-        await query.edit_message_text(
-            f"🎭 *Игра начинается!*\n\n"
-            f"👥 *Игроки ({player_count}):*\n"
-            f"{format_players_list(game, include_host=False)}\n\n"
-            f"Ведущий, используйте `/startnight` для начала первой ночи!",
-            parse_mode=ParseMode.MARKDOWN
-        )
+        try:
+            await query.edit_message_text(
+                f"🎭 *Игра начинается!*\n\n"
+                f"👥 *Игроки ({player_count}):*\n"
+                f"{format_players_list(game, include_host=False)}\n\n"
+                f"Ведущий, используйте `/startnight` для начала первой ночи!",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except Exception as e:
+            logger.warning(f"Не удалось обновить сообщение start_game: {e}")
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"🎭 *Игра начинается!*\n\n"
+                     f"👥 *Игроки ({player_count}):*\n"
+                     f"{format_players_list(game, include_host=False)}\n\n"
+                     f"Ведущий, используйте `/startnight` для начала первой ночи!",
+                parse_mode=ParseMode.MARKDOWN
+            )
 
     elif data == "cancel_game":
         chat_id = query.message.chat_id
         game = get_game(chat_id)
         if not game:
-            await query.edit_message_text("❌ Игра не найдена!")
+            try:
+                await query.edit_message_text("❌ Игра не найдена!")
+            except:
+                await query.answer("❌ Игра не найдена!", show_alert=True)
             return
         if user_id != game.host_id and user_id != game.creator_id:
-            await query.answer("❌ Только создатель может отменить!")
+            await query.answer("❌ Только создатель может отменить!", show_alert=True)
             return
         delete_game(chat_id)
-        await query.edit_message_text("❌ Игра отменена.")
+        try:
+            await query.edit_message_text("❌ Игра отменена.")
+        except:
+            await context.bot.send_message(chat_id=chat_id, text="❌ Игра отменена.")
 
     # Ночные действия
     elif data.startswith("sheriff_check_"):
