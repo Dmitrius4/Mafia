@@ -1531,12 +1531,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "start_game":
         chat_id = query.message.chat_id
+        logger.info(f"START_GAME: chat_id={chat_id}, user_id={user_id}")
+
         game = get_game(chat_id)
         if not game:
-            try:
-                await query.edit_message_text("❌ Игра не найдена!")
-            except:
-                await query.answer("❌ Игра не найдена!", show_alert=True)
+            await query.answer("❌ Игра не найдена!", show_alert=True)
             return
         if user_id != game.host_id:
             await query.answer("❌ Только Ведущий может начать!", show_alert=True)
@@ -1544,43 +1543,63 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not any(p.role for p in game.players.values()):
             await query.answer("❌ Сначала назначьте роли /setroles!", show_alert=True)
             return
+
         player_count = len([p for p in game.players.values() if p.user_id != game.host_id])
+        players_text = format_players_list(game, include_host=False)
+
+        await query.answer("▶️ Игра начинается!", show_alert=False)
+
+        # Уведомление в чат
         try:
-            await query.edit_message_text(
-                f"🎭 *Игра начинается!*\n\n"
-                f"👥 *Игроки ({player_count}):*\n"
-                f"{format_players_list(game, include_host=False)}\n\n"
-                f"Ведущий, используйте `/startnight` для начала первой ночи!",
-                parse_mode=ParseMode.MARKDOWN
-            )
-        except Exception as e:
-            logger.warning(f"Не удалось обновить сообщение start_game: {e}")
             await context.bot.send_message(
                 chat_id=chat_id,
-                text=f"🎭 *Игра начинается!*\n\n"
-                     f"👥 *Игроки ({player_count}):*\n"
-                     f"{format_players_list(game, include_host=False)}\n\n"
-                     f"Ведущий, используйте `/startnight` для начала первой ночи!",
-                parse_mode=ParseMode.MARKDOWN
+                text=f"▶️ Игра начинается!\n"
+                     f"👥 Игроков: {player_count}\n"
+                     f"📋 Состав:\n{players_text}\n\n"
+                     f"Ведущий, используйте /startnight"
             )
+        except Exception as e:
+            logger.error(f"START_GAME: не удалось отправить уведомление: {e}")
+
+        new_text = (
+            f"🎭 Игра начинается!\n\n"
+            f"👥 Игроки ({player_count}):\n"
+            f"{players_text}\n\n"
+            f"Ведущий, используйте /startnight для начала первой ночи!"
+        )
+
+        try:
+            await query.edit_message_text(text=new_text)
+            return
+        except Exception as e:
+            logger.warning(f"START_GAME: не удалось отредактировать: {e}")
+
+        try:
+            await context.bot.send_message(chat_id=chat_id, text=new_text)
+        except Exception as e2:
+            logger.error(f"START_GAME: не удалось отправить сообщение: {e2}")
+
+        return
 
     elif data == "cancel_game":
         chat_id = query.message.chat_id
         game = get_game(chat_id)
         if not game:
-            try:
-                await query.edit_message_text("❌ Игра не найдена!")
-            except:
-                await query.answer("❌ Игра не найдена!", show_alert=True)
+            await query.answer("❌ Игра не найдена!", show_alert=True)
             return
         if user_id != game.host_id and user_id != game.creator_id:
             await query.answer("❌ Только создатель может отменить!", show_alert=True)
             return
         delete_game(chat_id)
+        await query.answer("❌ Игра отменена.", show_alert=False)
         try:
             await query.edit_message_text("❌ Игра отменена.")
         except:
-            await context.bot.send_message(chat_id=chat_id, text="❌ Игра отменена.")
+            try:
+                await context.bot.send_message(chat_id=chat_id, text="❌ Игра отменена.")
+            except:
+                pass
+        return
 
     # Ночные действия
     elif data.startswith("sheriff_check_"):
