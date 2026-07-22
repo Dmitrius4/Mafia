@@ -1,7 +1,7 @@
 """
 🎭 МАФИЯ BOT для Telegram
 Полнофункциональный бот для игры в Мафию в групповом чате.
-Версия: 1.0
+Версия: 2.0
 
 Требования:
     pip install python-telegram-bot==20.7
@@ -221,7 +221,6 @@ class MafiaGame:
         return [p for p in self.get_alive_players().values() if p.team == team]
 
     def assign_roles(self, role_list: List[Role]):
-        # Назначаем роли только игрокам (не ведущему)
         players_only = [uid for uid in self.get_alive_players().keys() if uid != self.host_id]
         random.shuffle(players_only)
         for i, user_id in enumerate(players_only):
@@ -294,7 +293,6 @@ def format_players_list(game: MafiaGame, show_roles: bool = False, include_host:
     lines = []
     for uid in game.player_order:
         p = game.players[uid]
-        # Ведущий не отображается в списке игроков (только в своей вкладке)
         if uid == game.host_id and not include_host:
             continue
         status = "🟢" if p.is_alive else "💀"
@@ -303,13 +301,6 @@ def format_players_list(game: MafiaGame, show_roles: bool = False, include_host:
         else:
             lines.append(f"{status} {p.display_name}")
     return "\n".join(lines) if lines else "Нет игроков"
-def escape_markdown(text: str) -> str:
-    """Экранирует спецсимволы Markdown V1"""
-    chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
-    for char in chars:
-        text = text.replace(char, f"\\{char}")
-    return text
-
 
 def get_role_description(role: Role) -> str:
     descriptions = {
@@ -332,10 +323,45 @@ def get_role_description(role: Role) -> str:
         Role.MAFIA_BOSS: "Босс мафии. Руководит командой.",
         Role.MAFIA_HENCHMAN: "Подручный мафии.",
         Role.YAKUZA: "Член якудза. Убивает ночью вместе с командой.",
-        Role.YAKUZA_BOSS: "Босс якудза. +1 голос при ничьей. Ниндзя для Шерифа.",
+        Role.YAKUZA_BOSS: "Босс якудза. Ниндзя для Шерифа.",
         Role.YAKUZA_HENCHMAN: "Подручный якудза.",
     }
     return descriptions.get(role, "Описание отсутствует")
+
+
+def get_auto_roles(player_count: int) -> List[Role]:
+    """Автоматически подбирает балансированный набор ролей по количеству игроков."""
+    base_roles = {
+        3: [Role.SHERIFF, Role.MAFIA, Role.DOCTOR],
+        4: [Role.SHERIFF, Role.MAFIA, Role.DOCTOR, Role.COURTESAN],
+        5: [Role.SHERIFF, Role.MAFIA, Role.MAFIA_BOSS, Role.DOCTOR, Role.MANIAC],
+        6: [Role.SHERIFF, Role.SERGEANT, Role.MAFIA, Role.MAFIA_BOSS, Role.DOCTOR, Role.MANIAC],
+        7: [Role.SHERIFF, Role.SERGEANT, Role.MAFIA, Role.MAFIA_BOSS, Role.DOCTOR, Role.MANIAC, Role.COURTESAN],
+        8: [Role.SHERIFF, Role.SERGEANT, Role.MAFIA, Role.MAFIA_BOSS, Role.YAKUZA, Role.DOCTOR, Role.MANIAC, Role.COURTESAN],
+        9: [Role.SHERIFF, Role.SERGEANT, Role.MAFIA, Role.MAFIA_BOSS, Role.YAKUZA, Role.YAKUZA_BOSS, Role.DOCTOR, Role.MANIAC, Role.COURTESAN],
+        10: [Role.SHERIFF, Role.SERGEANT, Role.MAFIA, Role.MAFIA_BOSS, Role.YAKUZA, Role.YAKUZA_BOSS, Role.DOCTOR, Role.MANIAC, Role.COURTESAN, Role.JOURNALIST],
+        11: [Role.SHERIFF, Role.SERGEANT, Role.MAFIA, Role.MAFIA_BOSS, Role.YAKUZA, Role.YAKUZA_BOSS, Role.DOCTOR, Role.MANIAC, Role.COURTESAN, Role.JOURNALIST, Role.BUM],
+        12: [Role.SHERIFF, Role.SERGEANT, Role.MAFIA, Role.MAFIA_BOSS, Role.MAFIA_HENCHMAN, Role.YAKUZA, Role.YAKUZA_BOSS, Role.DOCTOR, Role.MANIAC, Role.COURTESAN, Role.JOURNALIST, Role.BUM],
+        13: [Role.SHERIFF, Role.SERGEANT, Role.MAFIA, Role.MAFIA_BOSS, Role.MAFIA_HENCHMAN, Role.YAKUZA, Role.YAKUZA_BOSS, Role.YAKUZA_HENCHMAN, Role.DOCTOR, Role.MANIAC, Role.COURTESAN, Role.JOURNALIST, Role.BUM],
+        14: [Role.SHERIFF, Role.SERGEANT, Role.MAFIA, Role.MAFIA_BOSS, Role.MAFIA_HENCHMAN, Role.YAKUZA, Role.YAKUZA_BOSS, Role.YAKUZA_HENCHMAN, Role.DOCTOR, Role.MANIAC, Role.COURTESAN, Role.JOURNALIST, Role.BUM, Role.POSTMAN],
+        15: [Role.SHERIFF, Role.SERGEANT, Role.MAFIA, Role.MAFIA_BOSS, Role.MAFIA_HENCHMAN, Role.YAKUZA, Role.YAKUZA_BOSS, Role.YAKUZA_HENCHMAN, Role.DOCTOR, Role.MANIAC, Role.COURTESAN, Role.JOURNALIST, Role.BUM, Role.POSTMAN, Role.JAILER],
+        16: [Role.SHERIFF, Role.SERGEANT, Role.MAFIA, Role.MAFIA_BOSS, Role.MAFIA_HENCHMAN, Role.YAKUZA, Role.YAKUZA_BOSS, Role.YAKUZA_HENCHMAN, Role.DOCTOR, Role.MANIAC, Role.COURTESAN, Role.JOURNALIST, Role.BUM, Role.POSTMAN, Role.JAILER, Role.GUNMAN],
+        17: [Role.SHERIFF, Role.SERGEANT, Role.MAFIA, Role.MAFIA_BOSS, Role.MAFIA_HENCHMAN, Role.YAKUZA, Role.YAKUZA_BOSS, Role.YAKUZA_HENCHMAN, Role.DOCTOR, Role.MANIAC, Role.COURTESAN, Role.JOURNALIST, Role.BUM, Role.POSTMAN, Role.JAILER, Role.GUNMAN, Role.CUPID],
+        18: [Role.SHERIFF, Role.SERGEANT, Role.MAFIA, Role.MAFIA_BOSS, Role.MAFIA_HENCHMAN, Role.YAKUZA, Role.YAKUZA_BOSS, Role.YAKUZA_HENCHMAN, Role.DOCTOR, Role.MANIAC, Role.COURTESAN, Role.JOURNALIST, Role.BUM, Role.POSTMAN, Role.JAILER, Role.GUNMAN, Role.CUPID, Role.JUDGE],
+        19: [Role.SHERIFF, Role.SERGEANT, Role.MAFIA, Role.MAFIA_BOSS, Role.MAFIA_HENCHMAN, Role.YAKUZA, Role.YAKUZA_BOSS, Role.YAKUZA_HENCHMAN, Role.DOCTOR, Role.MANIAC, Role.COURTESAN, Role.JOURNALIST, Role.BUM, Role.POSTMAN, Role.JAILER, Role.GUNMAN, Role.CUPID, Role.JUDGE, Role.VETERAN],
+        20: [Role.SHERIFF, Role.SERGEANT, Role.MAFIA, Role.MAFIA_BOSS, Role.MAFIA_HENCHMAN, Role.YAKUZA, Role.YAKUZA_BOSS, Role.YAKUZA_HENCHMAN, Role.DOCTOR, Role.MANIAC, Role.HARLOT, Role.COURTESAN, Role.JOURNALIST, Role.BUM, Role.POSTMAN, Role.JAILER, Role.GUNMAN, Role.CUPID, Role.JUDGE, Role.VETERAN],
+    }
+
+    if player_count < 3:
+        return []
+    if player_count > 20:
+        roles = base_roles[20].copy()
+        extra = player_count - 20
+        for _ in range(extra):
+            roles.append(random.choice([Role.VETERAN, Role.WITCH, Role.GUNMAN, Role.BUM]))
+        return roles
+
+    return base_roles.get(player_count, base_roles[min(player_count, 20)]).copy()
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -343,29 +369,30 @@ def get_role_description(role: Role) -> str:
 # ═══════════════════════════════════════════════════════════════
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🎭 *Добро пожаловать в бота Мафия!*\n\n"
+    text = (
+        "🎭 Добро пожаловать в бота Мафия!\n\n"
         "Я управляю игрой в Мафию прямо в групповом чате.\n"
-        "Создатель игры становится *Ведущим* и контролирует ход.\n\n"
-        "📋 *Основные команды:*\n"
-        "`/newgame` — создать новую игру\n"
-        "`/join` — присоединиться\n"
-        "`/roles` — список ролей\n"
-        "`/rules` — правила\n"
-        "`/startnight` — начать ночь (ведущий)\n"
-        "`/endnight` — закончить ночь (ведущий)\n"
-        "`/startvote` — начать голосование (ведущий)\n"
-        "`/endvote` — закончить голосование (ведущий)\n"
-        "`/kill @ник` — убить днём (стрелок)\n\n"
-        "Начните с `/newgame` в групповом чате!",
-        parse_mode=ParseMode.MARKDOWN
+        "Создатель игры становится Ведущим и контролирует ход.\n\n"
+        "📋 Основные команды:\n"
+        "/newgame — создать новую игру\n"
+        "/join — присоединиться\n"
+        "/roles — список ролей\n"
+        "/rules — правила\n"
+        "/startnight — начать ночь (ведущий)\n"
+        "/endnight — закончить ночь (ведущий)\n"
+        "/startvote — начать голосование (ведущий)\n"
+        "/endvote — закончить голосование (ведущий)\n"
+        "/kill @ник — выстрелить (стрелок)\n\n"
+        "Начните с /newgame в групповом чате!"
     )
+    await update.message.reply_text(text)
+
 
 async def newgame_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     user = update.effective_user
     if chat.type == "private":
-        await update.message.reply_text("❌ Игра создаётся только в *групповом чате*!", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text("❌ Игра создаётся только в групповом чате!")
         return
     if chat.id in games:
         delete_game(chat.id)
@@ -379,13 +406,15 @@ async def newgame_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("❌ Отменить", callback_data="cancel_game")]
     ]
     host_name = game.players[user.id].display_name
-    await update.message.reply_text(
+    text = (
         f"🎭 Новая игра Мафия создана!\n\n"
         f"👤 Ведущий: {host_name}\n"
-        f"👥 Игроки (0):\nпока никто не присоединился\n\n"
-        f"Нажмите «Присоединиться» чтобы войти в игру!",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        f"👥 Игроки (0):\n"
+        f"пока никто не присоединился\n\n"
+        f"Нажмите «Присоединиться» чтобы войти в игру!"
     )
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+
 
 async def join_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
@@ -395,7 +424,7 @@ async def join_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     game = get_game(chat.id)
     if not game:
-        await update.message.reply_text("❌ Нет активной игры. Создайте с помощью `/newgame`", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text("❌ Нет активной игры. Создайте с помощью /newgame")
         return
     if game.phase != GamePhase.WAITING:
         await update.message.reply_text("❌ Игра уже началась!")
@@ -405,19 +434,17 @@ async def join_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     game.add_player(user.id, user.username, user.first_name)
     user_game[user.id] = chat.id
-
-    # Уведомление о присоединении
     host = game.players.get(game.host_id)
     host_name = host.display_name if host else "Ведущий"
     player_count = len([p for p in game.players.values() if p.user_id != game.host_id])
-
-    await update.message.reply_text(
-        f"✅ *{game.players[user.id].display_name}* присоединился к игре!\n"
+    text = (
+        f"✅ {game.players[user.id].display_name} присоединился к игре!\n"
         f"👥 Всего игроков: {player_count}\n"
         f"👤 Ведущий: {host_name}\n\n"
-        f"📋 *Текущие игроки:*\n{format_players_list(game, include_host=False)}",
-        parse_mode=ParseMode.MARKDOWN
+        f"📋 Текущие игроки:\n{format_players_list(game, include_host=False)}"
     )
+    await update.message.reply_text(text)
+
 
 async def leave_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
@@ -436,6 +463,7 @@ async def leave_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(f"💀 {user.first_name} вышел из игры и считается мёртвым.")
 
+
 async def players_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     game = get_game(chat.id)
@@ -446,43 +474,42 @@ async def players_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     host = game.players.get(game.host_id)
     host_name = host.display_name if host else "?"
     player_count = len([p for p in game.players.values() if p.user_id != game.host_id])
+    text = f"👤 Ведущий: {host_name}\n\n👥 Игроки ({player_count}):\n{format_players_list(game, show_roles, include_host=False)}"
+    await update.message.reply_text(text)
 
-    text = f"👤 *Ведущий:* {host_name}\n\n"
-    text += f"👥 *Игроки ({player_count}):*\n{format_players_list(game, show_roles, include_host=False)}"
-
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
 async def roles_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = "🎭 *Доступные роли:*\n\n"
-    text += "*🟦 Мирные:*\n"
+    text = "🎭 Доступные роли:\n\n"
+    text += "🟦 Мирные:\n"
     for role in [Role.SHERIFF, Role.SERGEANT, Role.DOCTOR, Role.COURTESAN,
                  Role.JOURNALIST, Role.BUM, Role.POSTMAN, Role.JAILER,
                  Role.GUNMAN, Role.CUPID, Role.JUDGE, Role.VETERAN]:
         text += f"{role.value} — {get_role_description(role)}\n"
-    text += "\n*🟨 Нейтральные:*\n"
+    text += "\n🟨 Нейтральные:\n"
     for role in [Role.MANIAC, Role.HARLOT, Role.WITCH]:
         text += f"{role.value} — {get_role_description(role)}\n"
-    text += "\n*🟥 Мафия:*\n"
+    text += "\n🟥 Мафия:\n"
     for role in [Role.MAFIA, Role.MAFIA_BOSS, Role.MAFIA_HENCHMAN]:
         text += f"{role.value} — {get_role_description(role)}\n"
-    text += "\n*🟫 Якудза:*\n"
+    text += "\n🟫 Якудза:\n"
     for role in [Role.YAKUZA, Role.YAKUZA_BOSS, Role.YAKUZA_HENCHMAN]:
         text += f"{role.value} — {get_role_description(role)}\n"
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text(text)
+
 
 async def rules_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    rules = (
-        "📜 *Правила игры Мафия*\n\n"
-        "*Фазы:* 1️⃣ Ночь — роли делают ходы | 2️⃣ День — обсуждение и голосование\n\n"
-        "*Голосование:*\n"
+    text = (
+        "📜 Правила игры Мафия\n\n"
+        "Фазы: 1️⃣ Ночь — роли делают ходы | 2️⃣ День — обсуждение и голосование\n\n"
+        "Голосование:\n"
         "• Открытое, каждый называет ник (против себя нельзя!)\n"
         "• Повторно голосовать нельзя\n"
         "• При равенстве решает Судья → последний убитый мирный → случайный выбор\n\n"
-        "*Победа:* Мирные (нет мафии/маньяка) | Мафия/Якудза (равенство/превосходство) | "
+        "Победа: Мирные (нет мафии/маньяка) | Мафия/Якудза (равенство/превосходство) | "
         "Маньяк (один остался) | Путана (все заражены)\n\n"
-        "*Особенности:* Приватные каналы для команд, у всех есть роль!"
+        "Особенности: Приватные каналы для команд, у всех есть роль!"
     )
-    await update.message.reply_text(rules, parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text(text)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -502,10 +529,10 @@ async def setroles_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text(
             "❌ Укажите роли! Пример:\n"
-            "`/setroles sheriff doctor mafia mafia_boss maniac yakuza judge cupid`",
-            parse_mode=ParseMode.MARKDOWN
+            "/setroles sheriff doctor mafia mafia_boss maniac yakuza judge cupid"
         )
         return
+
     role_map = {
         "sheriff": Role.SHERIFF, "шериф": Role.SHERIFF,
         "sergeant": Role.SERGEANT, "сержант": Role.SERGEANT,
@@ -529,46 +556,44 @@ async def setroles_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "yakuza_boss": Role.YAKUZA_BOSS, "босс_якудза": Role.YAKUZA_BOSS,
         "yakuza_henchman": Role.YAKUZA_HENCHMAN, "подручный_якудза": Role.YAKUZA_HENCHMAN,
     }
+
     roles = []
     for arg in context.args:
         role_key = arg.lower()
         if role_key in role_map:
             roles.append(role_map[role_key])
         else:
-            await update.message.reply_text(f"❌ Неизвестная роль: `{arg}`", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text(f"❌ Неизвестная роль: {arg}")
             return
+
     player_count = len([p for p in game.players.values() if p.user_id != game.host_id])
     if len(roles) != player_count:
         await update.message.reply_text(f"❌ Ролей ({len(roles)}) != игроков ({player_count})! Ведущий не получает роль.")
         return
+
     game.assign_roles(roles)
+
     for uid, player in game.players.items():
         if player.role:
             try:
                 team_text = ""
                 if player.team == Team.MAFIA:
-                    mafia_names = [game.players[m].display_name for m in game.mafia_chat if m != uid]
-                    team_text = f"\n🎩 *Союзники мафии:* {', '.join(mafia_names)}" if mafia_names else ""
+                    mafia_names = [game.players[m].display_name for m in game.mafia_chat if m != uid and game.players[m].is_alive]
+                    team_text = ("\n🎩 Союзники мафии: " + ", ".join(mafia_names)) if mafia_names else ""
                 elif player.team == Team.YAKUZA:
-                    yakuza_names = [game.players[y].display_name for y in game.yakuza_chat if y != uid]
-                    team_text = f"\n🐉 *Союзники якудза:* {', '.join(yakuza_names)}" if yakuza_names else ""
+                    yakuza_names = [game.players[y].display_name for y in game.yakuza_chat if y != uid and game.players[y].is_alive]
+                    team_text = ("\n🐉 Союзники якудза: " + ", ".join(yakuza_names)) if yakuza_names else ""
                 elif player.role == Role.SERGEANT:
                     if game.sheriff_id:
-                        team_text = f"\n🤠 *Ваш Шериф:* {game.players[game.sheriff_id].display_name}"
-                await context.bot.send_message(
-                    chat_id=uid,
-                    text=f"🎭 *Ваша роль:* {player.role.value}\n"
-                         f"{get_role_description(player.role)}"
-                         f"{team_text}\n\n"
-                         f"🎮 *Игра в чате:* {chat.title}",
-                    parse_mode=ParseMode.MARKDOWN
-                )
+                        team_text = "\n🤠 Ваш Шериф: " + game.players[game.sheriff_id].display_name
+
+                msg_text = "🎭 Ваша роль: " + player.role.value + "\n" + get_role_description(player.role) + team_text + "\n\n🎮 Игра в чате началась!"
+                await context.bot.send_message(chat_id=uid, text=msg_text)
             except Exception as e:
                 logger.warning(f"Не удалось отправить роль {uid}: {e}")
-    await update.message.reply_text(
-        f"✅ Роли назначены! Каждый игрок получил роль в ЛС.\n"
-        f"Всего ролей: {len(roles)}"
-    )
+
+    await update.message.reply_text(f"✅ Роли назначены! Каждый игрок получил роль в ЛС. Всего ролей: {len(roles)}")
+
 
 async def startnight_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
@@ -582,7 +607,7 @@ async def startnight_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     if game.phase == GamePhase.WAITING:
         if not any(p.role for p in game.players.values()):
-            await update.message.reply_text("❌ Сначала назначьте роли `/setroles`!")
+            await update.message.reply_text("❌ Сначала назначьте роли /setroles!")
             return
     game.phase = GamePhase.NIGHT
     game.day_number += 1
@@ -613,9 +638,10 @@ async def startnight_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         p.gunman_shot_day = False
     game.log(f"Ночь {game.day_number}")
     await send_night_actions(context, game)
-    night_text = f"🌙 *НАЧАЛАСЬ НОЧЬ {game.day_number}* 🌙\n\nВсе жители засыпают...\n"
+
+    night_text = f"🌙 НАЧАЛАСЬ НОЧЬ {game.day_number} 🌙\n\nВсе жители засыпают...\n"
     if game.first_night:
-        night_text += "\n🎭 *Первая ночь — знакомства:*\n"
+        night_text += "\n🎭 Первая ночь — знакомства:\n"
         if game.mafia_chat:
             mafia_names = [game.players[uid].display_name for uid in game.mafia_chat if game.players[uid].is_alive]
             night_text += f"🎩 Мафия: {', '.join(mafia_names)}\n"
@@ -626,7 +652,8 @@ async def startnight_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             police_names = [game.players[uid].display_name for uid in game.police_station if game.players[uid].is_alive]
             night_text += f"🤠 Полиция: {', '.join(police_names)}\n"
         game.first_night = False
-    await update.message.reply_text(night_text, parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text(night_text)
+
 
 
 async def send_night_actions(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame):
@@ -645,8 +672,8 @@ async def send_night_actions(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame
                 keyboard.append([InlineKeyboardButton("🔫 Убить", callback_data="sheriff_kill_menu")])
                 keyboard.append([InlineKeyboardButton("🛡️ Охранять участок", callback_data="sheriff_guard")])
                 await context.bot.send_message(
-                    chat_id=uid, text="🤠 *Ночь Шерифа*\nВыберите действие:",
-                    parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard)
+                    chat_id=uid, text="🤠 Ночь Шерифа\nВыберите действие:",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 )
             elif player.role == Role.DOCTOR:
                 keyboard = []
@@ -655,11 +682,12 @@ async def send_night_actions(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame
                     heals = player.doctor_heals.get(tid, 0)
                     can_heal = heals < 2
                     btn = f"{t.display_name} (лечил: {heals}/2)"
-                    if not can_heal: btn += " ❌"
+                    if not can_heal:
+                        btn += " ❌"
                     keyboard.append([InlineKeyboardButton(btn, callback_data=f"doctor_heal_{tid}" if can_heal else "noop")])
                 await context.bot.send_message(
-                    chat_id=uid, text="👨‍⚕️ *Ночь Доктора*\nВыберите пациента (макс 2 раза, не подряд):",
-                    parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard)
+                    chat_id=uid, text="👨‍⚕️ Ночь Доктора\nВыберите пациента (макс 2 раза, не подряд):",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 )
             elif player.role == Role.COURTESAN:
                 keyboard = []
@@ -668,8 +696,8 @@ async def send_night_actions(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame
                         t = alive[tid]
                         keyboard.append([InlineKeyboardButton(t.display_name, callback_data=f"courtesan_{tid}")])
                 await context.bot.send_message(
-                    chat_id=uid, text="💃 *Ночь Куртизанки*\nВыберите клиента (не подряд, не себя):",
-                    parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard)
+                    chat_id=uid, text="💃 Ночь Куртизанки\nВыберите клиента (не подряд, не себя):",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 )
             elif player.role == Role.JOURNALIST:
                 keyboard = []
@@ -678,8 +706,8 @@ async def send_night_actions(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame
                         t = alive[tid]
                         keyboard.append([InlineKeyboardButton(t.display_name, callback_data=f"journalist_1_{tid}")])
                 await context.bot.send_message(
-                    chat_id=uid, text="📰 *Ночь Журналиста*\nВыберите *первого* игрока для сравнения:",
-                    parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard)
+                    chat_id=uid, text="📰 Ночь Журналиста\nВыберите первого игрока для сравнения:",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 )
             elif player.role == Role.BUM:
                 keyboard = []
@@ -688,8 +716,8 @@ async def send_night_actions(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame
                         t = alive[tid]
                         keyboard.append([InlineKeyboardButton(t.display_name, callback_data=f"bum_{tid}")])
                 await context.bot.send_message(
-                    chat_id=uid, text="🧙 *Ночь Бомжа*\nВыберите, за кем следить:",
-                    parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard)
+                    chat_id=uid, text="🧙 Ночь Бомжа\nВыберите, за кем следить:",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 )
             elif player.role == Role.POSTMAN:
                 keyboard = []
@@ -697,8 +725,8 @@ async def send_night_actions(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame
                     t = alive[tid]
                     keyboard.append([InlineKeyboardButton(f"Проверить: {t.display_name}", callback_data=f"postman_check_{tid}")])
                 await context.bot.send_message(
-                    chat_id=uid, text="📮 *Ночь Почтальона*\nВыберите, кого проверить:",
-                    parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard)
+                    chat_id=uid, text="📮 Ночь Почтальона\nВыберите, кого проверить:",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 )
             elif player.role == Role.JAILER:
                 keyboard = []
@@ -707,8 +735,8 @@ async def send_night_actions(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame
                         t = alive[tid]
                         keyboard.append([InlineKeyboardButton(t.display_name, callback_data=f"jailer_1_{tid}")])
                 await context.bot.send_message(
-                    chat_id=uid, text="🔒 *Ночь Тюремщика*\nВыберите *первого* заключённого (всего 2):",
-                    parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard)
+                    chat_id=uid, text="🔒 Ночь Тюремщика\nВыберите первого заключённого (всего 2):",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 )
             elif player.role == Role.CUPID:
                 keyboard = []
@@ -716,8 +744,8 @@ async def send_night_actions(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame
                     t = alive[tid]
                     keyboard.append([InlineKeyboardButton(t.display_name, callback_data=f"cupid_1_{tid}")])
                 await context.bot.send_message(
-                    chat_id=uid, text="💘 *Ночь Амура*\nВыберите *первого* влюблённого:",
-                    parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard)
+                    chat_id=uid, text="💘 Ночь Амура\nВыберите первого влюблённого:",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 )
             elif player.role == Role.VETERAN:
                 keyboard = [
@@ -725,8 +753,8 @@ async def send_night_actions(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame
                     [InlineKeyboardButton("😴 Спать", callback_data="veteran_sleep")]
                 ]
                 await context.bot.send_message(
-                    chat_id=uid, text="🛡️ *Ночь Ветерана*\nВстать на защиту?",
-                    parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard)
+                    chat_id=uid, text="🛡️ Ночь Ветерана\nВстать на защиту?",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 )
             elif player.role == Role.MANIAC:
                 keyboard = []
@@ -735,8 +763,8 @@ async def send_night_actions(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame
                         t = alive[tid]
                         keyboard.append([InlineKeyboardButton(t.display_name, callback_data=f"maniac_{tid}")])
                 await context.bot.send_message(
-                    chat_id=uid, text="🔪 *Ночь Маньяка*\nВыберите жертву:",
-                    parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard)
+                    chat_id=uid, text="🔪 Ночь Маньяка\nВыберите жертву:",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 )
             elif player.role == Role.HARLOT:
                 keyboard = []
@@ -746,8 +774,8 @@ async def send_night_actions(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame
                         inf = "🦠" if t.is_infected else ""
                         keyboard.append([InlineKeyboardButton(f"{t.display_name} {inf}", callback_data=f"harlot_{tid}")])
                 await context.bot.send_message(
-                    chat_id=uid, text="🦠 *Ночь Путаны*\nВыберите, кого заразить:",
-                    parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard)
+                    chat_id=uid, text="🦠 Ночь Путаны\nВыберите, кого заразить:",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 )
             elif player.role == Role.WITCH:
                 keyboard = []
@@ -756,8 +784,8 @@ async def send_night_actions(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame
                         t = alive[tid]
                         keyboard.append([InlineKeyboardButton(t.display_name, callback_data=f"witch_target_{tid}")])
                 await context.bot.send_message(
-                    chat_id=uid, text="🧙‍♀️ *Ночь Ведьмы*\nВыберите цель для контроля:",
-                    parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard)
+                    chat_id=uid, text="🧙‍♀️ Ночь Ведьмы\nВыберите цель для контроля:",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 )
             elif player.role in [Role.MAFIA, Role.MAFIA_BOSS, Role.MAFIA_HENCHMAN]:
                 is_boss = (uid == game.mafia_boss_id)
@@ -770,13 +798,12 @@ async def send_night_actions(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame
                             t = alive[tid]
                             keyboard.append([InlineKeyboardButton(t.display_name, callback_data=f"mafia_kill_{tid}")])
                     await context.bot.send_message(
-                        chat_id=uid, text="🎩 *Ночь Мафии*\nВы — представитель. Выберите жертву:",
-                        parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard)
+                        chat_id=uid, text="🎩 Ночь Мафии\nВы — представитель. Выберите жертву:",
+                        reply_markup=InlineKeyboardMarkup(keyboard)
                     )
                 else:
                     await context.bot.send_message(
-                        chat_id=uid, text="🎩 *Ночь Мафии*\nОжидайте решения Босса...",
-                        parse_mode=ParseMode.MARKDOWN
+                        chat_id=uid, text="🎩 Ночь Мафии\nОжидайте решения Босса..."
                     )
             elif player.role in [Role.YAKUZA, Role.YAKUZA_BOSS, Role.YAKUZA_HENCHMAN]:
                 is_boss = (uid == game.yakuza_boss_id)
@@ -789,16 +816,16 @@ async def send_night_actions(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame
                             t = alive[tid]
                             keyboard.append([InlineKeyboardButton(t.display_name, callback_data=f"yakuza_kill_{tid}")])
                     await context.bot.send_message(
-                        chat_id=uid, text="🐉 *Ночь Якудза*\nВы — представитель. Выберите жертву:",
-                        parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard)
+                        chat_id=uid, text="🐉 Ночь Якудза\nВы — представитель. Выберите жертву:",
+                        reply_markup=InlineKeyboardMarkup(keyboard)
                     )
                 else:
                     await context.bot.send_message(
-                        chat_id=uid, text="🐉 *Ночь Якудза*\nОжидайте решения Босса...",
-                        parse_mode=ParseMode.MARKDOWN
+                        chat_id=uid, text="🐉 Ночь Якудза\nОжидайте решения Босса..."
                     )
         except Exception as e:
             logger.error(f"Ошибка отправки действия игроку {uid}: {e}")
+
 
 async def endnight_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
@@ -812,9 +839,10 @@ async def endnight_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     results = await process_night(context, game)
     game.phase = GamePhase.DAY
-    day_text = f"☀️ *НАСТУПИЛ ДЕНЬ {game.day_number}* ☀️\n\n{results}\n\nЖивых: {len(game.get_alive_players())}\nНачинается обсуждение!"
-    await update.message.reply_text(day_text, parse_mode=ParseMode.MARKDOWN)
+    day_text = f"☀️ НАСТУПИЛ ДЕНЬ {game.day_number} ☀️\n\n{results}\n\nЖивых: {len(game.get_alive_players())}\nНачинается обсуждение!"
+    await update.message.reply_text(day_text)
     await check_win_condition(context, game)
+
 
 async def process_night(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame) -> str:
     alive = game.get_alive_players()
@@ -837,15 +865,14 @@ async def process_night(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame) -> 
             try:
                 await context.bot.send_message(
                     chat_id=lover1,
-                    text=f"💘 *Вы влюблены!* Ваш партнёр: {alive[lover2].display_name}",
-                    parse_mode=ParseMode.MARKDOWN
+                    text=f"💘 Вы влюблены! Ваш партнёр: {alive[lover2].display_name}"
                 )
                 await context.bot.send_message(
                     chat_id=lover2,
-                    text=f"💘 *Вы влюблены!* Ваш партнёр: {alive[lover1].display_name}",
-                    parse_mode=ParseMode.MARKDOWN
+                    text=f"💘 Вы влюблены! Ваш партнёр: {alive[lover1].display_name}"
                 )
-            except: pass
+            except:
+                pass
 
     # 2. Куртизанка
     courtesan_clients = {}
@@ -862,16 +889,17 @@ async def process_night(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame) -> 
             for tid in p.jailer_targets:
                 jailed.add(tid)
             messages.append("🔒 Тюремщик заключил игроков...")
-            # Создать тюремный чат
             for tid in p.jailer_targets:
                 if tid in alive:
                     try:
+                        partner_id = p.jailer_targets[0] if p.jailer_targets[0] != tid else (p.jailer_targets[1] if len(p.jailer_targets) > 1 else None)
+                        partner_name = alive[partner_id].display_name if partner_id and partner_id in alive else "нет"
                         await context.bot.send_message(
                             chat_id=tid,
-                            text=f"🔒 *Вы в тюрьме!*\nСобеседник: {alive[p.jailer_targets[0] if p.jailer_targets[0] != tid else p.jailer_targets[1]].display_name if len(p.jailer_targets) > 1 else 'нет'}\nТюремщик подслушивает...",
-                            parse_mode=ParseMode.MARKDOWN
+                            text=f"🔒 Вы в тюрьме!\nСобеседник: {partner_name}\nТюремщик подслушивает..."
                         )
-                    except: pass
+                    except:
+                        pass
 
     # 4. Ветеран
     veterans_guarding = set()
@@ -901,7 +929,7 @@ async def process_night(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame) -> 
     for uid, p in alive.items():
         if p.role in [Role.MAFIA, Role.MAFIA_BOSS, Role.MAFIA_HENCHMAN] and p.mafia_target:
             mafia_votes[p.mafia_target] = mafia_votes.get(p.mafia_target, 0) + 1
-            # Босс мафии не имеет +1 голоса
+            # Босс мафии не имеет +1 голоса (убрано по правилам)
     if mafia_votes:
         mafia_target = max(mafia_votes, key=mafia_votes.get)
         alive_mafia = [u for u, p in alive.items() if p.team == Team.MAFIA]
@@ -912,11 +940,11 @@ async def process_night(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame) -> 
                 messages.append("💃 Куртизанка отвлекла единственного мафиози...")
         if mafia_target and mafia_target not in jailed:
             if mafia_target in courtesan_clients:
-                pass  # Спасён куртизанкой
+                pass
             elif mafia_target in doctor_saves:
-                pass  # Спасён доктором
+                pass
             elif station_guarded and mafia_target in game.police_station:
-                pass  # Участок охраняется
+                pass
             elif mafia_target in veterans_guarding:
                 for muid in alive:
                     if alive[muid].team == Team.MAFIA and alive[muid].mafia_target == mafia_target:
@@ -930,7 +958,6 @@ async def process_night(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame) -> 
     for uid, p in alive.items():
         if p.role in [Role.YAKUZA, Role.YAKUZA_BOSS, Role.YAKUZA_HENCHMAN] and p.yakuza_target:
             yakuza_votes[p.yakuza_target] = yakuza_votes.get(p.yakuza_target, 0) + 1
-            # Босс якудза не имеет +1 голоса
     if yakuza_votes:
         yakuza_target = max(yakuza_votes, key=yakuza_votes.get)
         alive_yakuza = [u for u, p in alive.items() if p.team == Team.YAKUZA]
@@ -960,7 +987,7 @@ async def process_night(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame) -> 
             target = p.maniac_target
             if target not in jailed:
                 if target in courtesan_clients and courtesan_clients[target] == uid:
-                    pass  # Маньяк — клиент куртизанки
+                    pass
                 elif target in doctor_saves:
                     pass
                 elif target in veterans_guarding:
@@ -1004,10 +1031,10 @@ async def process_night(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame) -> 
             try:
                 await context.bot.send_message(
                     chat_id=game.sheriff_id,
-                    text=f"🤠 *Результат проверки {target.display_name}:*\n{result}",
-                    parse_mode=ParseMode.MARKDOWN
+                    text=f"🤠 Результат проверки {target.display_name}:\n{result}"
                 )
-            except: pass
+            except:
+                pass
 
     # Журналист сравнивает
     for uid, p in alive.items():
@@ -1029,14 +1056,14 @@ async def process_night(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame) -> 
                 same = (g1 == g2)
                 if (t1.role == Role.MANIAC or t2.role == Role.MANIAC) and g1 != g2:
                     same = False
-                result = "🟢 *Одинаковые*" if same else "🔴 *Разные*"
+                result = "🟢 Одинаковые" if same else "🔴 Разные"
                 try:
                     await context.bot.send_message(
                         chat_id=uid,
-                        text=f"📰 *Результат сравнения:*\n{t1.display_name} и {t2.display_name}\n{result}",
-                        parse_mode=ParseMode.MARKDOWN
+                        text=f"📰 Результат сравнения:\n{t1.display_name} и {t2.display_name}\n{result}"
                     )
-                except: pass
+                except:
+                    pass
 
     # Бомж следит
     for uid, p in alive.items():
@@ -1048,18 +1075,18 @@ async def process_night(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame) -> 
                 try:
                     await context.bot.send_message(
                         chat_id=uid,
-                        text=f"🧙 *Бомж увидел убийцу!*\n{alive[tid].display_name} убит: {killer}",
-                        parse_mode=ParseMode.MARKDOWN
+                        text=f"🧙 Бомж увидел убийцу!\n{alive[tid].display_name} убит: {killer}"
                     )
-                except: pass
+                except:
+                    pass
             else:
                 try:
                     await context.bot.send_message(
                         chat_id=uid,
-                        text=f"🧙 *Результат слежки:*\n{alive[tid].display_name} жив.",
-                        parse_mode=ParseMode.MARKDOWN
+                        text=f"🧙 Результат слежки:\n{alive[tid].display_name} жив."
                     )
-                except: pass
+                except:
+                    pass
 
     # Почтальон
     for uid, p in alive.items():
@@ -1071,10 +1098,10 @@ async def process_night(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame) -> 
                 try:
                     await context.bot.send_message(
                         chat_id=p.postman_to,
-                        text=f"📮 *Письмо от Почтальона:*\n{target.display_name} — {role_text}",
-                        parse_mode=ParseMode.MARKDOWN
+                        text=f"📮 Письмо от Почтальона:\n{target.display_name} — {role_text}"
                     )
-                except: pass
+                except:
+                    pass
 
     # Объединить убийства
     all_deaths = {}
@@ -1111,15 +1138,16 @@ async def process_night(context: ContextTypes.DEFAULT_TYPE, game: MafiaGame) -> 
             break
     if harlot_win and any(p.role == Role.HARLOT and p.is_alive for p in alive.values()):
         game.phase = GamePhase.FINISHED
-        return "🦠 *ПУТАНА ПОБЕДИЛА!* Все заражены чумой!"
+        return "🦠 ПУТАНА ПОБЕДИЛА! Все заражены чумой!"
 
     if death_names:
-        result = "🌙 *Ночные события:*\n" + "\n".join(death_names)
+        result = "🌙 Ночные события:\n" + "\n".join(death_names)
     else:
-        result = "🌙 *Ночь прошла спокойно...*\nНикто не погиб."
+        result = "🌙 Ночь прошла спокойно...\nНикто не погиб."
     if messages:
         result = "\n".join(messages) + "\n\n" + result
     return result
+
 
 
 async def startvote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1130,7 +1158,7 @@ async def startvote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Сейчас не день!")
         return
     if user.id != game.host_id:
-        await update.message.reply_text("❌ Только Ведущий!")
+        await update.message.reply_text("❌ Только Ведущий может начать голосование!")
         return
     game.phase = GamePhase.VOTING
     game.voting_active = True
@@ -1144,14 +1172,14 @@ async def startvote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         t = alive[tid]
         keyboard.append([InlineKeyboardButton(t.display_name, callback_data=f"vote_{tid}")])
     await update.message.reply_text(
-        "🗳️ *НАЧАЛОСЬ ГОЛОСОВАНИЕ!*\n\n"
+        "🗳️ НАЧАЛОСЬ ГОЛОСОВАНИЕ!\n\n"
         "Каждый живой игрок должен проголосовать.\n"
         "Против себя голосовать нельзя!\n"
         "Повторно голосовать нельзя!\n\n"
-        "Используйте кнопки ниже или команду `/vote @ник`",
-        parse_mode=ParseMode.MARKDOWN,
+        "Используйте кнопки ниже или команду /vote @ник",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
 
 async def vote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
@@ -1167,7 +1195,7 @@ async def vote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Вы уже проголосовали!")
         return
     if not context.args:
-        await update.message.reply_text("❌ Укажите ник! Пример: `/vote @username`", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text("❌ Укажите ник! Пример: /vote @username")
         return
     target_name = context.args[0].replace("@", "")
     target_id = None
@@ -1183,6 +1211,7 @@ async def vote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await process_vote(update, context, game, user.id, target_id)
 
+
 async def process_vote(update, context, game, voter_id, target_id):
     voter = game.players[voter_id]
     target = game.players[target_id]
@@ -1191,8 +1220,7 @@ async def process_vote(update, context, game, voter_id, target_id):
     if target_id not in game.vote_results:
         game.vote_results[target_id] = []
     game.vote_results[target_id].append(voter_id)
-    # Показать текущие результаты
-    vote_text = "🗳️ *Текущие голоса:*\n"
+    vote_text = "🗳️ Текущие голоса:\n"
     for tid, voters in game.vote_results.items():
         voter_names = [game.players[v].display_name for v in voters]
         vote_text += f"{game.players[tid].display_name}: {len(voters)} ({', '.join(voter_names)})\n"
@@ -1200,9 +1228,10 @@ async def process_vote(update, context, game, voter_id, target_id):
     if not_voted:
         vote_text += f"\n⏳ Не проголосовали: {', '.join(not_voted)}"
     if isinstance(update, Update):
-        await update.message.reply_text(vote_text, parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(vote_text)
     else:
-        await context.bot.send_message(chat_id=game.chat_id, text=vote_text, parse_mode=ParseMode.MARKDOWN)
+        await context.bot.send_message(chat_id=game.chat_id, text=vote_text)
+
 
 async def endvote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
@@ -1218,15 +1247,14 @@ async def endvote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game.phase = GamePhase.JUDGE
 
     if not game.vote_results:
-        await update.message.reply_text("🗳️ *Голосование завершено!*\nНикто не проголосовал.", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text("🗳️ Голосование завершено!\nНикто не проголосовал.")
         game.phase = GamePhase.DAY
         return
 
-    # Подсчёт голосов
     max_votes = max(len(v) for v in game.vote_results.values())
     candidates = [tid for tid, v in game.vote_results.items() if len(v) == max_votes]
 
-    vote_text = "🗳️ *Результаты голосования:*\n"
+    vote_text = "🗳️ Результаты голосования:\n"
     for tid, voters in game.vote_results.items():
         voter_names = [game.players[v].display_name for v in voters]
         vote_text += f"{game.players[tid].display_name}: {len(voters)} голосов ({', '.join(voter_names)})\n"
@@ -1234,10 +1262,9 @@ async def endvote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(candidates) == 1:
         candidate = candidates[0]
         candidate_name = game.players[candidate].display_name
-        vote_text += f"\n⚖️ *{candidate_name}* отправляется на суд!"
-        await update.message.reply_text(vote_text, parse_mode=ParseMode.MARKDOWN)
+        vote_text += f"\n⚖️ {candidate_name} отправляется на суд!"
+        await update.message.reply_text(vote_text)
 
-        # Судья решает
         judge = game.players.get(game.judge_id) if game.judge_id else None
         if judge and judge.is_alive and candidate != game.judge_id:
             game.judge_decision_pending = True
@@ -1248,27 +1275,22 @@ async def endvote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ]
                 await context.bot.send_message(
                     chat_id=game.judge_id,
-                    text=f"⚖️ *Судье решать!*\n{candidate_name} приговорён.\nКазнить или помиловать?",
-                    parse_mode=ParseMode.MARKDOWN,
+                    text=f"⚖️ Судье решать!\n{candidate_name} приговорён.\nКазнить или помиловать?",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
                 await update.message.reply_text("⚖️ Судья получил решение в ЛС...")
             except:
-                # Судья недоступен — случайный выбор
                 execute = random.choice([True, False])
                 await execute_verdict(context, game, candidate, execute)
         else:
-            # Нет судьи — случайный выбор или автоказнь
             if candidate == game.judge_id:
                 await execute_verdict(context, game, candidate, True)
             else:
-                # Последний убитый мирный или случайный
                 execute = random.choice([True, False])
                 await execute_verdict(context, game, candidate, execute)
     else:
-        # Ничья — судья решает
-        vote_text += f"\n⚖️ *Ничья!* Вызывается Судья..."
-        await update.message.reply_text(vote_text, parse_mode=ParseMode.MARKDOWN)
+        vote_text += f"\n⚖️ Ничья! Вызывается Судья..."
+        await update.message.reply_text(vote_text)
         judge = game.players.get(game.judge_id) if game.judge_id else None
         if judge and judge.is_alive:
             game.judge_decision_pending = True
@@ -1280,17 +1302,16 @@ async def endvote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard.append([InlineKeyboardButton("🕊️ Помиловать всех", callback_data="judge_pardon_all")])
                 await context.bot.send_message(
                     chat_id=game.judge_id,
-                    text=f"⚖️ *Ничья в голосовании!*\nВыберите, кого казнить, или помилуйте всех.",
-                    parse_mode=ParseMode.MARKDOWN,
+                    text=f"⚖️ Ничья в голосовании!\nВыберите, кого казнить, или помилуйте всех.",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
             except:
-                # Случайный выбор
                 chosen = random.choice(candidates)
                 await execute_verdict(context, game, chosen, True)
         else:
             chosen = random.choice(candidates)
             await execute_verdict(context, game, chosen, True)
+
 
 async def execute_verdict(context, game, target_id, execute):
     game.judge_decision_pending = False
@@ -1301,20 +1322,18 @@ async def execute_verdict(context, game, target_id, execute):
         role_text = target.role.value if game.phase == GamePhase.FINISHED else "❓"
         await context.bot.send_message(
             chat_id=game.chat_id,
-            text=f"☠️ *КАЗНЬ!*\n\n{target.display_name} ({role_text}) отправляется на виселицу!",
-            parse_mode=ParseMode.MARKDOWN
+            text=f"☠️ КАЗНЬ!\n\n{target.display_name} ({role_text}) отправляется на виселицу!"
         )
     else:
         await context.bot.send_message(
             chat_id=game.chat_id,
-            text=f"🕊️ *ПОМИЛОВАНИЕ!*\n\n{target.display_name} помилован и остаётся в живых.",
-            parse_mode=ParseMode.MARKDOWN
+            text=f"🕊️ ПОМИЛОВАНИЕ!\n\n{target.display_name} помилован и остаётся в живых."
         )
     game.phase = GamePhase.DAY
     await check_win_condition(context, game)
 
+
 async def kill_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Стрелок стреляет днём"""
     chat = update.effective_chat
     user = update.effective_user
     game = get_game(chat.id)
@@ -1332,7 +1351,7 @@ async def kill_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ В первый день стрелять нельзя!")
         return
     if not context.args:
-        await update.message.reply_text("❌ Укажите цель! `/kill @ник`", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text("❌ Укажите цель! /kill @ник")
         return
     target_name = context.args[0].replace("@", "")
     target_id = None
@@ -1352,17 +1371,16 @@ async def kill_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target.is_alive = False
     game.day_deaths.append(target_id)
 
-    # Проверить, мафия ли цель
     reveal = target.team not in [Team.MAFIA, Team.YAKUZA]
 
     await update.message.reply_text(
-        f"🔫 *ВЫСТРЕЛ!*\n\n"
+        f"🔫 ВЫСТРЕЛ!\n\n"
         f"{player.display_name} стреляет в {target.display_name}!\n"
         f"💀 {target.display_name} погибает!\n"
-        f"{'🔍 Роль Стрелка раскрыта!' if reveal else '🔍 Роль Стрелка остаётся тайной.'}",
-        parse_mode=ParseMode.MARKDOWN
+        f"{'🔍 Роль Стрелка раскрыта!' if reveal else '🔍 Роль Стрелка остаётся тайной.'}"
     )
     await check_win_condition(context, game)
+
 
 async def check_win_condition(context, game):
     alive = game.get_alive_players()
@@ -1374,19 +1392,14 @@ async def check_win_condition(context, game):
 
     winners = None
 
-    # Маньяк побеждает, если остался один
     if len(alive_maniac) == 1 and len(alive) == 1:
         winners = "🔪 МАНЬЯК ПОБЕДИЛ!"
-    # Мафия побеждает
     elif len(alive_mafia) >= len([p for p in alive.values() if p.team != Team.MAFIA]):
         winners = "🎩 МАФИЯ ПОБЕДИЛА!"
-    # Якудза побеждает
     elif len(alive_yakuza) >= len([p for p in alive.values() if p.team != Team.YAKUZA]):
         winners = "🐉 ЯКУДЗА ПОБЕДИЛИ!"
-    # Мирные побеждают
     elif not alive_mafia and not alive_yakuza and not alive_maniac:
         winners = "🟦 МИРНЫЕ ЖИТЕЛИ ПОБЕДИЛИ!"
-    # Путана
     elif alive_harlot:
         all_infected = all(p.is_infected or p.role == Role.HARLOT for p in alive.values())
         if all_infected:
@@ -1397,11 +1410,11 @@ async def check_win_condition(context, game):
         alive_text = format_players_list(game, show_roles=True)
         await context.bot.send_message(
             chat_id=game.chat_id,
-            text=f"🏆 *ИГРА ОКОНЧЕНА!*\n\n{winners}\n\n"
-                 f"📊 *Итоговые роли:*\n{alive_text}\n\n"
-                 f"📝 Используйте `/newgame` для новой игры!",
-            parse_mode=ParseMode.MARKDOWN
+            text=f"🏆 ИГРА ОКОНЧЕНА!\n\n{winners}\n\n"
+                 f"📊 Итоговые роли:\n{alive_text}\n\n"
+                 f"📝 Используйте /newgame для новой игры!"
         )
+
 
 async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
@@ -1427,17 +1440,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     user_id = query.from_user.id
 
-    # Логирование для отладки
     logger.info(f"Callback: data={data}, user_id={user_id}, chat_id={query.message.chat_id if query.message else 'None'}")
 
     if data == "join_game":
-        # Проверяем, что сообщение существует
         if not query.message:
             await query.answer("❌ Ошибка: сообщение не найдено", show_alert=True)
             return
 
         chat_id = query.message.chat_id
-        logger.info(f"JOIN: chat_id={chat_id}, user_id={user_id}, data={data}")
+        logger.info(f"JOIN: chat_id={chat_id}, user_id={user_id}")
 
         game = get_game(chat_id)
         if not game:
@@ -1455,7 +1466,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("❌ Вы уже в игре!", show_alert=True)
             return
 
-        # Добавляем игрока
         user = query.from_user
         success = game.add_player(user_id, user.username, user.first_name)
         if not success:
@@ -1465,10 +1475,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_game[user_id] = chat_id
         logger.info(f"JOIN: игрок {user_id} ({user.username}) добавлен в игру {chat_id}")
 
-        # Подтверждение игроку
         await query.answer("✅ Вы присоединились к игре!", show_alert=False)
 
-        # Уведомление в групповой чат
         host = game.players.get(game.host_id)
         host_name = host.display_name if host else "Ведущий"
         player_count = len([p for p in game.players.values() if p.user_id != game.host_id])
@@ -1481,11 +1489,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                      f"👥 Всего игроков: {player_count}\n"
                      f"👤 Ведущий: {host_name}"
             )
-            logger.info(f"JOIN: уведомление отправлено в чат {chat_id}")
         except Exception as e:
             logger.error(f"JOIN: не удалось отправить уведомление в чат: {e}")
 
-        # Обновляем сообщение с кнопками
         keyboard = [
             [InlineKeyboardButton("🎮 Присоединиться", callback_data="join_game")],
             [InlineKeyboardButton("▶️ Начать игру", callback_data="start_game")],
@@ -1494,39 +1500,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         players_text = format_players_list(game, include_host=False)
         new_text = (
-            f"🎭 *Игра Мафия*\n\n"
-            f"👤 *Ведущий:* {host_name}\n"
-            f"👥 *Игроки ({player_count}):*\n"
+            f"🎭 Игра Мафия\n\n"
+            f"👤 Ведущий: {host_name}\n"
+            f"👥 Игроки ({player_count}):\n"
             f"{players_text}\n\n"
             f"Нажмите «Присоединиться» чтобы войти!"
         )
 
-        # Пытаемся отредактировать сообщение
-        edit_success = False
         try:
-            # Убираем parse_mode чтобы избежать ошибок markdown
-            await query.edit_message_text(
-                text=new_text,
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            edit_success = True
-            logger.info(f"JOIN: сообщение отредактировано успешно")
+            await query.edit_message_text(text=new_text, reply_markup=InlineKeyboardMarkup(keyboard))
             return
         except Exception as e:
             logger.warning(f"JOIN: не удалось отредактировать сообщение: {e}")
 
-        # Если редактирование не удалось — отправляем новое
-        if not edit_success:
-            try:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=new_text,
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-                logger.info(f"JOIN: новое сообщение отправлено")
-            except Exception as e2:
-                logger.error(f"JOIN: не удалось отправить новое сообщение: {e2}")
-
+        try:
+            await context.bot.send_message(chat_id=chat_id, text=new_text, reply_markup=InlineKeyboardMarkup(keyboard))
+        except Exception as e2:
+            logger.error(f"JOIN: не удалось отправить новое сообщение: {e2}")
         return
 
     elif data == "start_game":
@@ -1540,44 +1530,72 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_id != game.host_id:
             await query.answer("❌ Только Ведущий может начать!", show_alert=True)
             return
-        if not any(p.role for p in game.players.values()):
-            await query.answer("❌ Сначала назначьте роли /setroles!", show_alert=True)
+
+        players_only = {uid: p for uid, p in game.players.items() if uid != game.host_id}
+        player_count = len(players_only)
+
+        if player_count < 3:
+            await query.answer(f"❌ Нужно минимум 3 игрока (сейчас {player_count})!", show_alert=True)
             return
 
-        player_count = len([p for p in game.players.values() if p.user_id != game.host_id])
+        auto_roles = get_auto_roles(player_count)
+        if not auto_roles:
+            await query.answer("❌ Не удалось подобрать роли!", show_alert=True)
+            return
+
+        game.assign_roles(auto_roles)
+
+        # Отправляем роли игрокам в ЛС
+        for uid, player in game.players.items():
+            if player.role and uid != game.host_id:
+                try:
+                    team_text = ""
+                    if player.team == Team.MAFIA:
+                        mafia_names = [game.players[m].display_name for m in game.mafia_chat if m != uid and game.players[m].is_alive]
+                        team_text = ("\n🎩 Союзники мафии: " + ", ".join(mafia_names)) if mafia_names else ""
+                    elif player.team == Team.YAKUZA:
+                        yakuza_names = [game.players[y].display_name for y in game.yakuza_chat if y != uid and game.players[y].is_alive]
+                        team_text = ("\n🐉 Союзники якудза: " + ", ".join(yakuza_names)) if yakuza_names else ""
+                    elif player.role == Role.SERGEANT:
+                        if game.sheriff_id:
+                            team_text = "\n🤠 Ваш Шериф: " + game.players[game.sheriff_id].display_name
+
+                    msg_text = "🎭 Ваша роль: " + player.role.value + "\n" + get_role_description(player.role) + team_text + "\n\n🎮 Игра в чате началась!"
+                    await context.bot.send_message(chat_id=uid, text=msg_text)
+                except Exception as e:
+                    logger.warning(f"Не удалось отправить роль {uid}: {e}")
+
+        # Формируем список ролей в партии
+        roles_in_game = {}
+        for p in game.players.values():
+            if p.role and p.user_id != game.host_id:
+                role_name = p.role.value
+                roles_in_game[role_name] = roles_in_game.get(role_name, 0) + 1
+
+        roles_text = "\n".join(["  " + role + " x" + str(count) for role, count in sorted(roles_in_game.items())])
         players_text = format_players_list(game, include_host=False)
+
+        # Сообщение в общий чат о начале игры
+        start_message = (
+            "🎭 ИГРА НАЧАЛАСЬ!\n\n"
+            "📅 День 1\n"
+            "👥 Игроков: " + str(player_count) + "\n\n"
+            "📋 Состав игроков:\n" + players_text + "\n\n"
+            "🎭 Роли в партии:\n" + roles_text + "\n\n"
+            "Ведущий, используйте /startnight для первой ночи!"
+        )
 
         await query.answer("▶️ Игра начинается!", show_alert=False)
 
-        # Уведомление в чат
         try:
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"▶️ Игра начинается!\n"
-                     f"👥 Игроков: {player_count}\n"
-                     f"📋 Состав:\n{players_text}\n\n"
-                     f"Ведущий, используйте /startnight"
-            )
+            await context.bot.send_message(chat_id=chat_id, text=start_message)
         except Exception as e:
-            logger.error(f"START_GAME: не удалось отправить уведомление: {e}")
-
-        new_text = (
-            f"🎭 Игра начинается!\n\n"
-            f"👥 Игроки ({player_count}):\n"
-            f"{players_text}\n\n"
-            f"Ведущий, используйте /startnight для начала первой ночи!"
-        )
+            logger.error(f"START_GAME: не удалось отправить стартовое сообщение: {e}")
 
         try:
-            await query.edit_message_text(text=new_text)
-            return
+            await query.edit_message_text(text="🎭 Игра началась! Роли разданы.")
         except Exception as e:
-            logger.warning(f"START_GAME: не удалось отредактировать: {e}")
-
-        try:
-            await context.bot.send_message(chat_id=chat_id, text=new_text)
-        except Exception as e2:
-            logger.error(f"START_GAME: не удалось отправить сообщение: {e2}")
+            logger.warning(f"START_GAME: не удалось отредактировать сообщение: {e}")
 
         return
 
@@ -1620,7 +1638,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     t = alive[tid]
                     keyboard.append([InlineKeyboardButton(t.display_name, callback_data=f"sheriff_kill_{tid}")])
             keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="sheriff_cancel_kill")])
-            await query.edit_message_text("🔫 *Выберите жертву:*", parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard))
+            await query.edit_message_text("🔫 Выберите жертву:", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data.startswith("sheriff_kill_"):
         target_id = int(data.split("_")[-1])
@@ -1675,8 +1693,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     t = alive[tid]
                     keyboard.append([InlineKeyboardButton(t.display_name, callback_data=f"journalist_2_{tid}")])
             await query.edit_message_text(
-                f"📰 Первый: {game.players[target1_id].display_name}\nВыберите *второго*:",
-                parse_mode=ParseMode.MARKDOWN,
+                f"📰 Первый: {game.players[target1_id].display_name}\nВыберите второго:",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
 
@@ -1711,7 +1728,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     keyboard.append([InlineKeyboardButton(f"Отправить: {t.display_name}", callback_data=f"postman_send_{tid}")])
             await query.edit_message_text(
                 f"📮 Проверяем: {game.players[target_id].display_name}\nВыберите, кому отправить письмо:",
-                parse_mode=ParseMode.MARKDOWN,
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
 
@@ -1740,8 +1756,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     keyboard.append([InlineKeyboardButton(t.display_name, callback_data=f"jailer_2_{tid}")])
             keyboard.append([InlineKeyboardButton("✅ Готово (1 заключённый)", callback_data="jailer_done")])
             await query.edit_message_text(
-                f"🔒 Первый: {game.players[target1_id].display_name}\nВыберите *второго* или завершите:",
-                parse_mode=ParseMode.MARKDOWN,
+                f"🔒 Первый: {game.players[target1_id].display_name}\nВыберите второго или завершите:",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
 
@@ -1774,7 +1789,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard.append([InlineKeyboardButton(t.display_name, callback_data=f"cupid_2_{tid}")])
             await query.edit_message_text(
                 f"💘 Первый влюблённый: {game.players[target1_id].display_name}\nВыберите второго:",
-                parse_mode=ParseMode.MARKDOWN,
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
 
@@ -1788,7 +1802,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 game.players[t1].lover_id = target2_id
                 game.players[target2_id].is_lover = True
                 game.players[target2_id].lover_id = t1
-                game.players[user_id].lover_id = t1  # Амур помнит пару
+                game.players[user_id].lover_id = t1
                 await query.edit_message_text(
                     f"💘 {game.players[t1].display_name} и {game.players[target2_id].display_name} теперь влюблены!"
                 )
@@ -1839,7 +1853,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if game and game.phase == GamePhase.NIGHT:
             game.players[user_id].mafia_target = target_id
             await query.edit_message_text(f"🎩 Мафия выбирает: {game.players[target_id].display_name}")
-            # Уведомить других мафиози
             for mid in game.mafia_chat:
                 if mid != user_id and mid in game.players and game.players[mid].is_alive:
                     try:
@@ -1847,7 +1860,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             chat_id=mid,
                             text=f"🎩 Босс выбрал: {game.players[target_id].display_name}"
                         )
-                    except: pass
+                    except:
+                        pass
 
     elif data.startswith("yakuza_kill_"):
         target_id = int(data.split("_")[-1])
@@ -1862,7 +1876,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             chat_id=yid,
                             text=f"🐉 Босс выбрал: {game.players[target_id].display_name}"
                         )
-                    except: pass
+                    except:
+                        pass
 
     elif data.startswith("vote_"):
         target_id = int(data.split("_")[-1])
@@ -1901,13 +1916,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             if target_id == "all":
                 await query.edit_message_text("🕊️ Вы помиловали всех.")
-                # Найти всех кандидатов и помиловать
                 game.judge_decision_pending = False
                 game.phase = GamePhase.DAY
                 await context.bot.send_message(
                     chat_id=game.chat_id,
-                    text="🕊️ *ПОМИЛОВАНИЕ!*\n\nСудья помиловал всех приговорённых!",
-                    parse_mode=ParseMode.MARKDOWN
+                    text="🕊️ ПОМИЛОВАНИЕ!\n\nСудья помиловал всех приговорённых!"
                 )
             else:
                 target_id = int(target_id)
